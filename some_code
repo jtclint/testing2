@@ -1,0 +1,93 @@
+#!ipxe
+
+# Debian Operating System
+# http://www.debian.org
+
+goto ${menu}
+
+:auto_debian
+set os Debian
+set os_arch ${arch}
+iseq ${os_arch} x86_64 && set os_arch amd64 ||
+iseq ${os_arch} i386 && set os_arch i386 ||
+iseq ${os_arch} arm64 && set os_arch arm64 ||
+clear auto_debian_version
+clear older_release
+menu ${os} - ${os_arch}
+item --gap Latest Releases
+item bookworm ${space} ${os} 12.0 (bookworm)
+item bullseye ${space} ${os} 11.0 (bullseye)
+item buster ${space} ${os} 10.0 (buster)
+item --gap Testing Releases
+item trixie ${space} ${os} trixie (testing)
+item sid ${space} ${os} sid (unstable)
+item --gap Older Releases
+item older_release ${space} Set release codename...
+choose auto_debian_version || goto auto_debian_exit
+iseq ${autodebian_version} older_release && goto older_release ||
+choose --timeout ${timeout} --default ${auto_debian} menu || goto ${menu}
+goto mirrorcfg
+
+:older_release
+set older_release true
+set auto_debian_mirror http://archive.debian.org
+echo Setting mirror to ${auto_debian_mirror}
+clear auto_debian_version
+echo -n Please set enter code name of release: ${} && read auto_debian_version
+set dir ${auto_debian_base_dir}/dists/${auto_debian_version}/main/installer-${os_arch}/current/images/netboot/
+goto autodeb_boot_type
+
+:mirrorcfg
+set auto_debian_mirror ${auto_debian_mirror}
+set mirrorcfg mirror/suite=${auto_debian_version}
+set dir ${auto_debian_base_dir}/dists/${auto_debian_version}/main/installer-${os_arch}/current/images/netboot/
+goto auto_deb_boot_type
+
+:auto_deb_boot_type
+menu ${os} [${auto_debian_version}] Installer
+item --gap Install types
+item text ${space} Text Based Install
+item graphical ${space} Graphical Based Install
+item rescue ${space} Rescue Mode
+item expert ${space} Expert Install
+item preseed ${space} Specify preseed url...
+choose --default ${type} type || goto auto_debian
+
+echo ${cls}
+goto auto_deb_${type}
+
+:auto_deb_rescue
+set install_params rescue/enable=true
+goto auto_deb_text
+
+:auto_deb_expert
+set install_params priority=low
+goto auto_deb_text
+
+:auto_deb_preseed
+echo -n Specify preseed URL for ${os} ${auto_debian_version}: && read preseedurl
+set install_params auto=true priority=critical preseed/url=${preseedurl}
+goto auto_deb_text
+
+:auto_deb_text
+set dir ${dir}${menu}-installer/${os_arch}
+goto auto_deb_boot
+
+:auto_deb_graphical
+set dir ${dir}gtk/${menu}-installer/${os_arch}
+set install_params vga=788
+goto auto_deb_boot
+
+:auto_deb_boot
+imgfree
+kernel ${auto_debian_mirror}/${dir}/linux ${install_params} ${netcfg} ${mirrorcfg} initrd=initrd.magic ${cmdline}
+initrd ${auto_debian_mirror}/${dir}/initrd.gz
+echo
+echo MD5sums:
+md5sum linux initrd.gz
+boot
+
+:auto_debian_exit
+clear menu
+exit 0
+
